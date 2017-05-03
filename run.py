@@ -75,19 +75,20 @@ def main(args):
 
 	saver = tf.train.Saver(max_to_keep=config.num_epochs)
 	step = 0
-	gpuconfig = tf.ConfigProto()
-	gpuconfig.gpu_options.per_process_gpu_memory_fraction = 0.4
-	with tf.Session(config=gpuconfig) as session:
-		file_writer = tf.summary.FileWriter(args.ckpt_dir, graph=session.graph, 
-									max_queue=10, flush_secs=30)
-		i_stopped, found_ckpt = utils.get_checkpoint(args, session, saver)
-		if args.train == 'train':
-			init_op = tf.global_variables_initializer()
-			init_op.run()
+	# gpuconfig = tf.ConfigProto(device_count = {'CPU': 0})
+	# gpuconfig.gpu_options.per_process_gpu_memory_fraction = 0.4
+	with tf.Session() as session:
+		with tf.device("/cpu:0"):
+			file_writer = tf.summary.FileWriter(args.ckpt_dir, graph=session.graph, 
+										max_queue=10, flush_secs=30)
+			i_stopped, found_ckpt = utils.get_checkpoint(args, session, saver)
+			if args.train == 'train':
+				init_op = tf.global_variables_initializer()
+				init_op.run()
 
-			for i in range(i_stopped,config.num_epochs):
-				print "Running epoch {0}".format(i)
-				run_epoch(session, i, args, config)
+				for i in range(i_stopped,config.num_epochs):
+					print "Running epoch {0}".format(i)
+					run_epoch(session, i, args, config)
 
 		# if args.train == 'test':
 
