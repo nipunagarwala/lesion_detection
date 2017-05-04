@@ -14,7 +14,11 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 DATA_PATH = '/scratch/users/nipuna1/lesion_data/liver_lesions.mat'
-DATASET_DIR = '/scratch/users/nipuna1/lesion_data/lesion_contour_dataset/'
+NO_UPSAMPLED_DIR = '/scratch/users/nipuna1/lesion_data/lesion_noupsampled_dataset/'
+UPSAMPLED_DIR = '/scratch/users/nipuna1/lesion_data/lesion_upsampled_dataset/'
+UPSAMPLED_IMAGE_DIR = '/scratch/users/nipuna1/lesion_data/lesion_upsampled_images/'
+NO_UPSAMPLED_IMAGE_DIR = '/scratch/users/nipuna1/lesion_data/lesion_noupsampled_images/'
+TRAINSET_DIR = UPSAMPLED_DIR
 FINAL_DIM = 100
 
 imageData = None
@@ -26,12 +30,12 @@ def parseCommandLine():
 
 	print("Parsing Command Line Arguments...")
 	requiredTrain = parser.add_argument_group('Required Train/Test arguments')
-	requiredTrain.add_argument('-p', choices = ["train", "test", "dev"], type = str,
+	requiredTrain.add_argument('-p', choices = ["train", "test", "dev", "features"], type = str,
 						dest = 'train', required = True, help = 'Training or Testing phase to be run')
 
 	parser.add_argument('-ckpt', dest='ckpt_dir', default='/scratch/users/nipuna1/lesion_ckpt', 
 									type=str, help='Set the checkpoint directory')
-	parser.add_argument('-data', dest='data_dir', default=DATASET_DIR, 
+	parser.add_argument('-data', dest='data_dir', default=TRAINSET_DIR, 
 									type=str, help='Set the data directory')
 
 	args = parser.parse_args()
@@ -124,7 +128,7 @@ def create_normal_tissue_data(curImage, ROIdata, scale, lesion_scale, str_name, 
 		print "Resized Lesion boundaries"
 		print cur_xmin, cur_xmax, cur_ymin, cur_ymax
 		upsampled_image, orig_no_canvas_im = upsample_data(curImage, cur_ymin, cur_ymax, cur_xmin, cur_xmax)
-		augment_image_list  = augment_data(upsampled_image, orig_no_canvas_im, scale, num_xpixels, num_ypixels)
+		augment_image_list = augment_data(upsampled_image, orig_no_canvas_im, scale, num_xpixels, num_ypixels)
 
 		augment_image_list.append(upsampled_image)
 		save_images(augment_image_list,str_name, it, i)
@@ -227,11 +231,25 @@ def save_images(image_list, im_type, num, scale):
 			# 'upsampled_' + im_type + '_' + str(scale) + '_noisy_' + str(num) + '.png',
 			'upsampled_' + im_type + '_' + str(scale) + '_' + str(num) + '.png']
 
+	np_labels = ['upsampled_' + im_type + '_' + str(scale) + '_rot1_' + str(num) + '.npy',
+			'upsampled_' + im_type + '_' + str(scale) + '_rot2_' + str(num) + '.npy',
+			'upsampled_' + im_type + '_' + str(scale) + '_rot3_' + str(num) + '.npy',
+			'upsampled_' + im_type + '_' + str(scale) + '_trans1_' + str(num) + '.npy',
+			'upsampled_' + im_type + '_' + str(scale) + '_trans2_' + str(num) + '.npy',
+			'upsampled_' + im_type + '_' + str(scale) + '_trans3_' + str(num) + '.npy',
+			'upsampled_' + im_type + '_' + str(scale) + '_trans4_' + str(num) + '.npy',
+			'upsampled_' + im_type + '_' + str(scale) + '_elast_xcomp_' + str(num) + '.npy',
+			'upsampled_' + im_type + '_' + str(scale) + '_elast_ycomp_' + str(num) + '.npy',
+			# 'upsampled_' + im_type + '_' + str(scale) + '_noisy_' + str(num) + '.png',
+			'upsampled_' + im_type + '_' + str(scale) + '_' + str(num) + '.npy']
+
+	plt.figure()
 	for i in xrange(len(image_list)):
-		plt.figure()
 		plt.imshow(image_list[i], cmap='gray')
 		plt.colorbar()
-		plt.savefig(DATASET_DIR + image_labels[i])
+		plt.savefig(IMAGE_DIR + image_labels[i])
+		np.save(UPSAMPLED_DIR + np_labels[i], image_list[i])
+		plt.clf()
 
 
 def test_contour_creation():
@@ -252,39 +270,52 @@ def test_contour_creation():
 				(np.max([int((xmax-xmin))/2, int((ymax-ymin))/2]), np.min([int((xmax-xmin))/2, int((ymax-ymin))/2])), 
 				0.0, 0.0, 360.0, (0,255,255), 2)
 
-	# upsampled_image, orig_no_canvas_im = upsample_data(newIm, ymin, ymax, xmin, xmax)
-
 	print np.max([int((xmax-xmin))/2, int((ymax-ymin))/2]), np.min([int((xmax-xmin))/2, int((ymax-ymin))/2])
 
 	plt.imshow(newIm, cmap='gray')
-	plt.savefig(DATASET_DIR + 'upsampled_image_with_contour.png')
+	plt.savefig(UPSAMPLED_DIR + 'upsampled_image_with_contour.png')
 
 
-def create_contours_on_plot():
-	num_images = 1 #imageData.shape[1]
-	for i in xrange(0, num_images):
-		print "Starting contour creations for Image {0}".format(i+1)
-		curImage = imageData[0,i]
-		ROIdata = CompROIdata[0][i]
+def create_nonsampled_data_mt():
+	num_images = imageData.shape[1] #8
+	print "Creating threads for dataset creation"
+	P = Pool(processes=8)
+	P.map(create_contours_on_plot, (i for i in range(0, num_images )) )
 
-		ymin = int(np.min(ROIdata['ROI_X'][0,0][0]))
-		ymax = int(np.max(ROIdata['ROI_X'][0,0][0]))
-		xmin = int(np.min(ROIdata['ROI_Y'][0,0][0]))
-		xmax = int(np.max(ROIdata['ROI_Y'][0,0][0]))
+def create_contours_on_plot(it):
+	print "Starting contour creations for Image {0}".format(it+1)
+	curImage = imageData[0,it]
+	ROIdata = CompROIdata[0][it]
 
-		lesion_scale = np.linspace(0.6, 0.8, num=3)
-		booundary_scale = np.linspace(0.9, 1.1, num=3)
-		external_scale = np.linspace(1.3, 1.5, num=3)
+	ymin = int(np.min(ROIdata['ROI_X'][0,0][0]))
+	ymax = int(np.max(ROIdata['ROI_X'][0,0][0]))
+	xmin = int(np.min(ROIdata['ROI_Y'][0,0][0]))
+	xmax = int(np.max(ROIdata['ROI_Y'][0,0][0]))
 
-		print "Finding Ellipse Boundaries"
-		cropped_lesion, new_xmin, new_xmax, new_ymin, new_ymax = find_cropped_lesion(curImage,
-																	 xmin, xmax, ymin, ymax)
-		origMask = np.zeros((xmax- xmin, ymax- ymin))
+	lesion_scale = np.linspace(0.6, 0.8, num=3)
+	booundary_scale = np.linspace(0.9, 1.1, num=3)
+	external_scale = np.linspace(1.3, 1.5, num=3)
 
-		print "Creating ellipses for lesion"
-		create_ellipses(cropped_lesion, origMask, lesion_scale, new_xmin, new_xmax, new_ymin, new_ymax, i, 'internal')
-		create_ellipses(cropped_lesion, origMask, booundary_scale, new_xmin, new_xmax, new_ymin, new_ymax, i, 'boundary')
-		create_ellipses(cropped_lesion, origMask, external_scale, new_xmin, new_xmax, new_ymin, new_ymax, i, 'external')
+	print "Finding Ellipse Boundaries"
+	cropped_lesion, new_xmin, new_xmax, new_ymin, new_ymax = find_cropped_lesion(curImage,
+																 xmin, xmax, ymin, ymax)
+	origMask = np.zeros((xmax- xmin, ymax- ymin))
+
+	print "Creating ellipses for lesion"
+	create_ellipses(cropped_lesion, origMask, lesion_scale, new_xmin, new_xmax, new_ymin, new_ymax, it, 'internal')
+	create_ellipses(cropped_lesion, origMask, booundary_scale, new_xmin, new_xmax, new_ymin, new_ymax, it, 'boundary')
+	create_ellipses(cropped_lesion, origMask, external_scale, new_xmin, new_xmax, new_ymin, new_ymax, it, 'external')
+
+	ymin = int(np.min(ROIdata['Normal_ROIx'][0][0]))
+	ymax = int(np.max(ROIdata['Normal_ROIx'][0][0]))
+	xmin = int(np.min(ROIdata['Normal_ROIy'][0][0]))
+	xmax = int(np.max(ROIdata['Normal_ROIy'][0][0]))
+
+	cropped_lesion, new_xmin, new_xmax, new_ymin, new_ymax = find_cropped_lesion(curImage,
+																 xmin, xmax, ymin, ymax)
+	origMask = np.zeros((xmax- xmin, ymax- ymin))
+	print origMask.shape
+	create_ellipses(cropped_lesion, origMask, lesion_scale, new_xmin, new_xmax, new_ymin, new_ymax, it, 'normal')
 
 
 def find_cropped_lesion(curImage, xmin, xmax, ymin, ymax):
@@ -313,9 +344,16 @@ def find_cropped_lesion(curImage, xmin, xmax, ymin, ymax):
 
 
 def create_ellipses(cropped_lesion, origMask, mask_range, xmin, xmax, ymin, ymax, im_num, str_name):
+	num_xpixels = 20
+	num_ypixels = 10
+	scale = 0.75
 	for k in mask_range:
 		curMask = scipy.misc.imresize(origMask, k)
 		mask_x, mask_y = curMask.shape
+		if mask_x > FINAL_DIM:
+			mask_x = FINAL_DIM
+		if mask_y > FINAL_DIM:
+			mask_y = FINAL_DIM
 
 		xmid = int((xmin+xmax)/2)
 		ymid = int((ymin+ymax)/2)
@@ -331,18 +369,53 @@ def create_ellipses(cropped_lesion, origMask, mask_range, xmin, xmax, ymin, ymax
 		# newIm = cv2.ellipse(cropped_lesion.copy(),(xmid,ymid), (maj_axis, min_axis), 
 		# 	0.0, 0.0, 360.0, (0,255,255), 1)
 		newIm = cropped_lesion[cur_xmin:cur_xmax, cur_ymin:cur_ymax]
-		newIm = fit_canvas(newIm)
-		plt.imshow(newIm, cmap='gray')
-		plt.savefig(DATASET_DIR + 'cropped_lesion_' + str(im_num) + '_with_' + str_name + '_contour_scale_' + str(k) + '.png')
+		newIm_with_canvas = fit_canvas(newIm)
+		augment_image_list = augment_data(newIm_with_canvas, newIm, scale, num_xpixels, num_ypixels)
 
+		augment_image_list.append(newIm_with_canvas)
+		save_images_nonupsampled(augment_image_list,str_name, im_num, k)
 
+		# plt.imshow(newIm, cmap='gray')
+		# plt.savefig(NO_UPSAMPLED_DIR + 'cropped_lesion_' + str(im_num) + '_with_' + str_name + '_contour_scale_' + str(k) + '.png')
+
+def save_images_nonupsampled(image_list, im_type, num, scale):
+	image_labels = ['cropped_lesion_' + im_type + '_' + str(scale) + '_rot1_' + str(num) + '.png',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_rot2_' + str(num) + '.png',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_rot3_' + str(num) + '.png',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_trans1_' + str(num) + '.png',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_trans2_' + str(num) + '.png',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_trans3_' + str(num) + '.png',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_trans4_' + str(num) + '.png',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_elast_xcomp_' + str(num) + '.png',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_elast_ycomp_' + str(num) + '.png',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_' + str(num) + '.png']
+
+	np_labels = ['cropped_lesion_' + im_type + '_' + str(scale) + '_rot1_' + str(num) + '.npy',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_rot2_' + str(num) + '.npy',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_rot3_' + str(num) + '.npy',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_trans1_' + str(num) + '.npy',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_trans2_' + str(num) + '.npy',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_trans3_' + str(num) + '.npy',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_trans4_' + str(num) + '.npy',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_elast_xcomp_' + str(num) + '.npy',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_elast_ycomp_' + str(num) + '.npy',
+			'cropped_lesion_' + im_type + '_' + str(scale) + '_' + str(num) + '.npy']
+
+	plt.figure()
+	for i in xrange(len(image_list)):
+		plt.imshow(image_list[i], cmap='gray')
+		plt.colorbar()
+		plt.savefig(NO_UPSAMPLED_IMAGE_DIR + image_labels[i])
+		np.save(NO_UPSAMPLED_DIR + np_labels[i], image_list[i])
+		plt.clf()
 
 
 def main():
 	load_data(DATA_PATH)
 	# test_contour_creation()
-	create_dataset_mt()
+	# create_dataset_mt()
 	# create_contours_on_plot()
+	create_nonsampled_data_mt()
 
 
 
