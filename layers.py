@@ -31,8 +31,35 @@ class Layers(object):
 
 		result = tf.matmul(prev_output, weights) + bias
 		activation = tf.nn.relu(result, name=activ_name)
-		output = tf.nn.dropout(activation, keep_prob)
-		return output
+		# output = tf.nn.dropout(activation, keep_prob)
+		return activation
+
+	def residual_unit(self, prev_output, filter_dim1, stride1,  conv_name1, filter_name1, activ_name1,
+					filter_dim2, stride2, conv_name2, filter_name2, activ_name2, padding,
+					down_sample, phase, projection=False):
+
+		if down_sample:
+			prev_output = tf.contrib.layers.max_pool2d(prev_output,kernel_size=[3,3],stride=[2,2],padding='SAME')
+
+		conv1 = self.conv2d_layer(prev_output, filter_dim1, stride1, padding, conv_name1, filter_name1, activ_name1, phase)
+		conv2 = self.conv2d_layer(conv1, filter_dim2, stride2, padding, conv_name2, filter_name2, activ_name2, phase)
+
+		input_depth = filter_dim1[2]
+		output_depth = filter_dim1[3]
+		input_layer = prev_output
+
+		if input_depth != output_depth:
+			if projection:
+				# Option B: Projection shortcut
+				input_layer = self.conv2d_layer(input_layer, [1, 1, input_depth, output_depth], 
+							[1,1,1,1], padding, conv_name1+'_proj', filter_name2+'_proj',
+							activ_name2+'_proj', phase)
+			else:
+				# Option A: Zero-padding
+				input_layer = tf.pad(input_layer, [[0,0], [0,0], [0,0], [0, output_depth - input_depth]])
+
+		res = conv2 + input_layer
+		return res
 
 
 
