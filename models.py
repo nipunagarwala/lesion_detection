@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np 
 from layers import *
+from scipy.stats import entropy
 
 
 
@@ -32,7 +33,7 @@ class ConvolutionalNN(Layers):
 
 		conv_layer2 = self.conv2d_layer(conv_layer1,filter2, stride2,'SAME','conv_layer2','filter_2','relu2', self.phase )
 
-		max_pool1 = tf.contrib.layers.max_pool2d(conv_layer2,kernel_size=[3,3],stride=[2,2],padding='SAME')
+		max_pool1 = tf.contrib.layers.max_pool2d(conv_layer2,kernel_size=[3,3],stride=[1,1],padding='SAME')
 
 		filter3 = [3,3,32,32]
 		stride3 = [1, 1, 1,1]
@@ -45,11 +46,11 @@ class ConvolutionalNN(Layers):
 		conv_layer4 = self.conv2d_layer(conv_layer3,filter4, stride4,'SAME','conv_layer4', 'filter_4' ,'relu4', self.phase )
 
 		self.cnn_feat = conv_layer4
-		max_pool2 = tf.contrib.layers.max_pool2d(conv_layer4,kernel_size=[3,3],stride=[2,2],padding='SAME')
+		max_pool2 = tf.contrib.layers.max_pool2d(conv_layer4,kernel_size=[3,3],stride=[1,1],padding='SAME')
 
 		flatten_layer = tf.contrib.layers.flatten(max_pool2)
 
-		hidden_units1 = 1000
+		hidden_units1 = 256
 		fc1_output = self.fc_layer(flatten_layer, hidden_units1, self.keep_prob, 'weights_1', 'bias_1', 'relu5')
 
 		hidden_units2 = self.num_classes
@@ -73,12 +74,12 @@ class ConvolutionalNN(Layers):
 
 		max_pool1 = tf.contrib.layers.max_pool2d(conv_layer2,kernel_size=[3,3],stride=[1,1],padding='SAME')
 
-		filter3 = [3,3,32,32]
+		filter3 = [3,3,32,64]
 		stride3 = [1, 1, 1,1]
 
 		conv_layer3 = self.conv2d_layer(max_pool1,filter3, stride3,'SAME','conv_layer3','filter_3','relu3', self.phase )
 
-		filter4 = [3,3,32,32]
+		filter4 = [3,3,64,64]
 		stride4 = [1, 1, 1,1]
 
 		conv_layer4 = self.conv2d_layer(conv_layer3,filter4, stride4,'SAME','conv_layer4', 'filter_4' ,'relu4', self.phase )
@@ -87,20 +88,20 @@ class ConvolutionalNN(Layers):
 		max_pool2 = tf.contrib.layers.max_pool2d(conv_layer4,kernel_size=[3,3],stride=[1,1],padding='SAME')
 
 
-		filter5 = [3,3,32,32]
+		filter5 = [3,3,64,64]
 		stride5 = [1, 1, 1,1]
 
 		conv_layer5 = self.conv2d_layer(max_pool2,filter5, stride5,'SAME','conv_layer5','filter_5','relu5', self.phase )
 
-		filter6 = [3,3,32,32]
+		filter6 = [3,3,64,64]
 		stride6 = [1, 1, 1,1]
 
 		conv_layer6 = self.conv2d_layer(conv_layer5,filter6, stride6,'SAME','conv_layer6', 'filter_6' ,'relu6', self.phase )
 
 		
-		max_pool3 = tf.contrib.layers.max_pool2d(conv_layer6,kernel_size=[3,3],stride=[2,2],padding='SAME')
+		max_pool3 = tf.contrib.layers.max_pool2d(conv_layer6,kernel_size=[3,3],stride=[1,1],padding='SAME')
 
-		filter7 = [3,3,32,32]
+		filter7 = [3,3,64,32]
 		stride7 = [1, 1, 1,1]
 
 		conv_layer7 = self.conv2d_layer(max_pool3,filter7, stride7,'SAME','conv_layer7','filter_7','relu7', self.phase )
@@ -111,21 +112,22 @@ class ConvolutionalNN(Layers):
 		conv_layer8 = self.conv2d_layer(conv_layer7,filter8, stride8,'SAME','conv_layer8', 'filter_8' ,'relu8', self.phase )
 		# conv_layer8 = tf.nn.dropout(conv_layer8, keep_prob=self.keep_prob)
 		
-		max_pool4 = tf.contrib.layers.max_pool2d(conv_layer8,kernel_size=[3,3],stride=[2,2],padding='SAME')
+		max_pool4 = tf.contrib.layers.max_pool2d(conv_layer8,kernel_size=[3,3],stride=[1,1],padding='SAME')
 
 		self.cnn_feat = max_pool4
 		flatten_layer = tf.contrib.layers.flatten(max_pool4)
 
-		hidden_units1 = 1000
+		hidden_units1 = 256
 		fc1_output = self.fc_layer(flatten_layer, hidden_units1, self.keep_prob, 'weights_1', 'bias_1', 'relu5')
 
 		hidden_units2 = self.num_classes
-		fc2_output = self.fc_layer(fc1_output, hidden_units2, self.keep_prob, 'weights_2', 'bias_2', 'relu6')
+		fc2_output = self.fc_layer(fc1_output, hidden_units2, self.keep_prob, 'weights_2', 'bias_2', 'relu6', False)
 
 		self.output = fc2_output
 		self.pred_prob = tf.nn.softmax(fc2_output, name='Prob_layer')
 		# self.pred =  tf.nn.sparse_softmax_cross_entropy_with_logits(targets =self.labels , logits = self.output, name='Pred_layer' )
 		self.pred = tf.argmax(self.pred_prob,1)
+
 
 	def build_much_deeper_model(self):
 		filter1 = [3,3,1,32]
@@ -286,7 +288,7 @@ class ConvolutionalNN(Layers):
 		self.cnn_feat = res_layer8
 		flatten_layer = tf.contrib.layers.flatten(res_layer8)
 
-		hidden_units1 = 1000
+		hidden_units1 = 256
 		fc1_output = self.fc_layer(flatten_layer, hidden_units1, self.keep_prob, 'weights_1', 'bias_1', 'relu5')
 
 		hidden_units2 = self.num_classes
@@ -300,16 +302,27 @@ class ConvolutionalNN(Layers):
 
 
 	def train_function(self):
-		l2_lambda = 0.1
+		l2_lambda = 0.001
 		l2_cost = 0.0
-		# train_vars = tf.trainable_variables()
-		# for v in train_vars:
-		# 	l2_cost += tf.nn.l2_loss(v)
+		train_vars = tf.trainable_variables()
+		for v in train_vars:
+			l2_cost += tf.nn.l2_loss(v)
 
 		main_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels =self.labels , logits = self.output))
 
 		self.loss_op = main_loss + l2_lambda*l2_cost
-		self.train_op = tf.train.AdamOptimizer(name='Adam').minimize(self.loss_op)
+		# self.train_op = tf.train.AdamOptimizer(learning_rate=0.00001).minimize(self.loss_op) #Works for CT and MRI
+		# self.train_op = tf.train.AdamOptimizer(learning_rate=0.0000001).minimize(self.loss_op) #Works for CT and MRI
+
+		self.train_op = tf.train.AdamOptimizer().minimize(self.loss_op) #Works for CT and MRI
+
+		# self.train_op = tf.train.AdamOptimizer(learning_rate=0.00005).minimize(self.loss_op) #Works for CT and LUNG
+		# self.train_op = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.loss_op)
+		# self.train_op = tf.train.MomentumOptimizer(name='Momentum', learning_rate=0.00005, momentum=0.9,
+		# 				use_nesterov=True).minimize(self.loss_op)
+		# self.train_op = tf.train.GradientDescentOptimizer(learning_rate=0.0001).minimize(self.loss_op)
+		# 				use_nesterov=True).minimize(self.loss_op)
+		# self.train_op = tf.train.RMSPropOptimizer(learning_rate=0.0001, momentum=0.99).minimize(self.loss_op)
 
 
 	def summary(self):
@@ -339,6 +352,50 @@ class ConvolutionalNN(Layers):
 		predictions, accuracies, summaries = session.run([self.pred, self.accuracy_op, self.summary_op], feed_dict = feed_dict)
 		print "Average accuracy of the current batch is: {0}".format(accuracies)
 		return predictions, accuracies, summaries
+
+	def get_confidence_one_batch(self, session, input_batch, label_batch, phase ):
+		feed_dict = {self.input: input_batch, self.labels: label_batch, 
+						self.phase: phase}
+
+		probabilities, logits = session.run([self.pred_prob, self.output], feed_dict = feed_dict)
+		# print "Average accuracy of the current batch is: {0}".format(accuracies)
+		# print logits
+		return probabilities
+
+	def get_scaled_confidence_one_batch(self, session, input_batch, label_batch, phase, 
+						int_bin_counts, bound_bin_counts, ext_bin_counts, num_ex, bin_rng):
+		feed_dict = {self.input: input_batch, self.labels: label_batch, 
+						self.phase: phase}
+
+		probabilities, logits = session.run([self.pred_prob, self.output], feed_dict = feed_dict)
+
+		input_sim_index = np.zeros((num_ex, 3))
+		for i in xrange(num_ex):
+			cur_bin_cnts, _ =  np.histogram(input_batch[i,:,:,0], bin_rng)
+			cur_bin_cnts = cur_bin_cnts.astype(float)
+			cur_bin_cnts += 1e-3
+			cur_bin_cnts = cur_bin_cnts/np.sum(cur_bin_cnts)
+
+			input_sim_index[i,0] = entropy(cur_bin_cnts, int_bin_counts)
+			input_sim_index[i,1] = entropy(cur_bin_cnts, bound_bin_counts)
+			input_sim_index[i,2] = entropy(cur_bin_cnts, ext_bin_counts)
+			input_sim_index += 1e-3
+
+		scaled_logits = np.zeros((num_ex, 3))
+
+		scaled_logits[:,0] = probabilities[:,0]/input_sim_index[:,0]
+		scaled_logits[:,1] = probabilities[:,1]/input_sim_index[:,1]
+		scaled_logits[:,2] = probabilities[:,2]/input_sim_index[:,2]
+
+		scaled_prob = np.zeros((num_ex, 3))
+		for i in xrange(num_ex):
+			scaled_prob[i,:] = scaled_logits[i,:]/np.sum(scaled_logits[i,:])
+
+
+
+		# print "Average accuracy of the current batch is: {0}".format(accuracies)
+		# print logits
+		return scaled_prob
 
 	def find_cnn_features(self, session,input_batch, phase):
 		feed_dict = {self.input: input_batch, self.phase: phase}

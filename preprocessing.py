@@ -12,14 +12,40 @@ import matplotlib
 matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
+from shapely.geometry import Polygon, Point
+import random
 
-DATA_PATH = '/scratch/users/nipuna1/lesion_data/liver_lesions.mat'
+# DATA_PATH = '/scratch/users/nipuna1/lesion_data/mri_data/MR4Nipun.mat'
+# DATA_PATH = '/scratch/users/nipuna1/lesion_data/liver_lesions.mat'
+DATA_PATH = '/scratch/users/nipuna1/lesion_data/CTLiverNew.mat'
+# DATA_PATH = '/scratch/users/nipuna1/lesion_data/BrainMR_Norm.mat'
+# DATA_PATH = '/scratch/users/nipuna1/lesion_data/FinalLungCT.mat'
 NO_UPSAMPLED_DIR = '/scratch/users/nipuna1/lesion_data/lesion_noupsampled_dataset/'
 UPSAMPLED_DIR = '/scratch/users/nipuna1/lesion_data/lesion_upsampled_dataset/'
 UPSAMPLED_IMAGE_DIR = '/scratch/users/nipuna1/lesion_data/lesion_upsampled_images/'
 NO_UPSAMPLED_IMAGE_DIR = '/scratch/users/nipuna1/lesion_data/lesion_noupsampled_images/'
+
+# PATCHED_DATA_DIR = '/scratch/users/nipuna1/lesion_data/lesion_patched_ct_40_dataset/'
+# PATCHED_DATA_IMAGES = '/scratch/users/nipuna1/lesion_data/lesion_patched_ct_40_images/'
+PATCHED_DATA_DIR = '/scratch/users/nipuna1/lesion_data/lesion_patched_ct_patch_10_dataset/'
+PATCHED_DATA_IMAGES = '/scratch/users/nipuna1/lesion_data/lesion_patched_ct_patch_10_images/'
+# PATCHED_MRI_DIR = '/scratch/users/nipuna1/lesion_data/lesion_patched_mri_40_dataset/'
+# PATCHED_MRI_IMAGES = '/scratch/users/nipuna1/lesion_data/lesion_patched_mri_40_images/'
+PATCHED_MRI_DIR = '/scratch/users/nipuna1/lesion_data/lesion_patched_brain_rand_100_dataset/'
+PATCHED_MRI_IMAGES = '/scratch/users/nipuna1/lesion_data/lesion_patched_brain_rand_100_images/'
+# PATCHED_LUNG_DIR = '/scratch/users/nipuna1/lesion_data/lesion_patched_lung_40_dataset/'
+# PATCHED_LUNG_IMAGES = '/scratch/users/nipuna1/lesion_data/lesion_patched_lung_40_images/'
+PATCHED_LUNG_DIR = '/scratch/users/nipuna1/lesion_data/lesion_patched_lung_rand_100_dataset/'
+PATCHED_LUNG_IMAGES = '/scratch/users/nipuna1/lesion_data/lesion_patched_lung_rand_100_images/'
+
+
+MRI_NOUPSAMPLED_DIR = '/scratch/users/nipuna1/lesion_data/mri_data/mri_noupsampled_dataset/'
+MRI_NOUPSAMPLED_IMAGE_DIR = '/scratch/users/nipuna1/lesion_data/mri_data/mri_noupsampled_images/'
+
 TRAINSET_DIR = UPSAMPLED_DIR
-FINAL_DIM = 100
+FINAL_DIM = 40
+
+TEST_DIR = '/home/nipuna1/lesion_detection_research/lesion_detection/opp_coord_bound/'
 
 imageData = None
 CompROIdata = None
@@ -37,9 +63,16 @@ def parseCommandLine():
 									type=str, help='Set the checkpoint directory')
 	parser.add_argument('-data', dest='data_dir', default=TRAINSET_DIR, 
 									type=str, help='Set the data directory')
+	parser.add_argument('-kfold', dest='kfold', action='store_true')
+	parser.add_argument('-upsampled', dest='upsampled', action='store_true')
+	parser.add_argument('-no_upsampled', dest='no_upsampled', action='store_true')
+	parser.add_argument('-patched', dest='patched', action='store_true')
 
 	args = parser.parse_args()
 	return args
+
+
+
 
 def load_data(data_path):
 	global imageData
@@ -49,7 +82,7 @@ def load_data(data_path):
 	imageData = data['NewImage']
 	CompROIdata = data['ROIdata']
 	print 'Loaded Data'
-	# print data.keys()
+	print data.keys()
 	return data['NewImage'], data['ROIdata']
 
 
@@ -255,17 +288,22 @@ def save_images(image_list, im_type, num, scale):
 def test_contour_creation():
 	curImage = imageData[0, 0]
 	ROIdata = CompROIdata[0][0]
-	ymin = int(np.min(ROIdata['ROI_X'][0,0][0]))
-	ymax = int(np.max(ROIdata['ROI_X'][0,0][0]))
-	xmin = int(np.min(ROIdata['ROI_Y'][0,0][0]))
-	xmax = int(np.max(ROIdata['ROI_Y'][0,0][0]))
+	ymin = int(np.min(ROIdata['ROI_Y'][0,0]))
+	ymax = int(np.max(ROIdata['ROI_Y'][0,0]))
+	xmin = int(np.min(ROIdata['ROI_X'][0,0]))
+	xmax = int(np.max(ROIdata['ROI_X'][0,0]))
 
-	cnt_list = np.zeros((len(ROIdata['ROI_X'][0,0][0]), 2))
-	cnt_list[:,0] = ROIdata['ROI_X'][0,0][0]
-	cnt_list[:,1] = ROIdata['ROI_Y'][0,0][0]
+	cnt_list = np.zeros((len(ROIdata['ROI_X'][0,0]), 2))
+	cnt_list[:,0] = ROIdata['ROI_X'][0,0][:,0]
+	cnt_list[:,1] = ROIdata['ROI_Y'][0,0][:,0]
 
 	ctr = np.array(cnt_list).reshape((-1,2)).astype(np.int32)
 	# newIm = cv2.drawContours(curImage.copy(), [ctr], 0, (0,255,0), 1)
+	curImage  = np.float32(curImage)
+	print curImage.dtype
+
+	curImage = cv2.cvtColor(curImage, cv2.COLOR_BGR2YUV)
+	curImage = cv2.equalizeHist(curImage)
 	newIm = cv2.ellipse(curImage.copy(),(int((ymin+ymax)/2),int((xmin+xmax)/2) ),
 				(np.max([int((xmax-xmin))/2, int((ymax-ymin))/2]), np.min([int((xmax-xmin))/2, int((ymax-ymin))/2])), 
 				0.0, 0.0, 360.0, (0,255,255), 2)
@@ -273,43 +311,57 @@ def test_contour_creation():
 	print np.max([int((xmax-xmin))/2, int((ymax-ymin))/2]), np.min([int((xmax-xmin))/2, int((ymax-ymin))/2])
 
 	plt.imshow(newIm, cmap='gray')
-	plt.savefig(UPSAMPLED_DIR + 'upsampled_image_with_contour.png')
+	plt.savefig('noupsampled_image_with_contour.png')
 
 
 def create_nonsampled_data_mt():
 	num_images = imageData.shape[1] #8
+
 	print "Creating threads for dataset creation"
-	P = Pool(processes=8)
+	P = Pool(processes=1)
 	P.map(create_contours_on_plot, (i for i in range(0, num_images )) )
 
 def create_contours_on_plot(it):
 	print "Starting contour creations for Image {0}".format(it+1)
 	curImage = imageData[0,it]
+	# print curImage.shape
 	ROIdata = CompROIdata[0][it]
 
-	ymin = int(np.min(ROIdata['ROI_X'][0,0][0]))
-	ymax = int(np.max(ROIdata['ROI_X'][0,0][0]))
-	xmin = int(np.min(ROIdata['ROI_Y'][0,0][0]))
-	xmax = int(np.max(ROIdata['ROI_Y'][0,0][0]))
+	# ymin = int(np.min(ROIdata['ROI_X'][0,0][0]))
+	# ymax = int(np.max(ROIdata['ROI_X'][0,0][0]))
+	# xmin = int(np.min(ROIdata['ROI_X'][0,0][0]))
+	# xmax = int(np.max(ROIdata['ROI_X'][0,0][0]))
+	ymin = int(np.min(ROIdata['ROI_X'][0,0]))
+	ymax = int(np.max(ROIdata['ROI_X'][0,0]))
+	xmin = int(np.min(ROIdata['ROI_Y'][0,0]))
+	xmax = int(np.max(ROIdata['ROI_Y'][0,0]))
 
 	lesion_scale = np.linspace(0.6, 0.8, num=3)
 	booundary_scale = np.linspace(0.9, 1.1, num=3)
 	external_scale = np.linspace(1.3, 1.5, num=3)
 
 	print "Finding Ellipse Boundaries"
+	print ymin, ymax, xmin, xmax
 	cropped_lesion, new_xmin, new_xmax, new_ymin, new_ymax = find_cropped_lesion(curImage,
 																 xmin, xmax, ymin, ymax)
 	origMask = np.zeros((xmax- xmin, ymax- ymin))
+	if (xmax- xmin) <= 15 and (ymax- ymin) <= 15:
+		# print("Image {0}:{1} has not been added to dataset".format(str_name, im_num))
+		return
 
 	print "Creating ellipses for lesion"
 	create_ellipses(cropped_lesion, origMask, lesion_scale, new_xmin, new_xmax, new_ymin, new_ymax, it, 'internal')
 	create_ellipses(cropped_lesion, origMask, booundary_scale, new_xmin, new_xmax, new_ymin, new_ymax, it, 'boundary')
 	create_ellipses(cropped_lesion, origMask, external_scale, new_xmin, new_xmax, new_ymin, new_ymax, it, 'external')
 
-	ymin = int(np.min(ROIdata['Normal_ROIx'][0][0]))
-	ymax = int(np.max(ROIdata['Normal_ROIx'][0][0]))
-	xmin = int(np.min(ROIdata['Normal_ROIy'][0][0]))
-	xmax = int(np.max(ROIdata['Normal_ROIy'][0][0]))
+	# ymin = int(np.min(ROIdata['Normal_ROIy'][0][0]))
+	# ymax = int(np.max(ROIdata['Normal_ROIy'][0][0]))
+	# xmin = int(np.min(ROIdata['Normal_ROIx'][0][0]))
+	# xmax = int(np.max(ROIdata['Normal_ROIx'][0][0]))
+	ymin = int(np.min(ROIdata['Normal_ROIy'][0,0]))
+	ymax = int(np.max(ROIdata['Normal_ROIy'][0,0]))
+	xmin = int(np.min(ROIdata['Normal_ROIx'][0,0]))
+	xmax = int(np.max(ROIdata['Normal_ROIx'][0,0]))
 
 	cropped_lesion, new_xmin, new_xmax, new_ymin, new_ymax = find_cropped_lesion(curImage,
 																 xmin, xmax, ymin, ymax)
@@ -350,6 +402,7 @@ def create_ellipses(cropped_lesion, origMask, mask_range, xmin, xmax, ymin, ymax
 	for k in mask_range:
 		curMask = scipy.misc.imresize(origMask, k)
 		mask_x, mask_y = curMask.shape
+
 		if mask_x > FINAL_DIM:
 			mask_x = FINAL_DIM
 		if mask_y > FINAL_DIM:
@@ -405,9 +458,183 @@ def save_images_nonupsampled(image_list, im_type, num, scale):
 	for i in xrange(len(image_list)):
 		plt.imshow(image_list[i], cmap='gray')
 		plt.colorbar()
-		plt.savefig(NO_UPSAMPLED_IMAGE_DIR + image_labels[i])
-		np.save(NO_UPSAMPLED_DIR + np_labels[i], image_list[i])
+		plt.savefig(MRI_NOUPSAMPLED_IMAGE_DIR + image_labels[i])
+		np.save(MRI_NOUPSAMPLED_DIR + np_labels[i], image_list[i])
 		plt.clf()
+
+
+def create_patched_data_mt():
+	num_images = imageData.shape[1] #8
+	print "Creating threads for patched data creation"
+	P = Pool(processes=8)
+	# num_images = 9
+	P.map(create_patched_data, (i for i in xrange(0, num_images)) )
+	create_patched_data(num_images)
+
+
+
+def create_patched_data(it):
+	image_rad = 5
+	curImage = imageData[0,it]
+	# print curImage.shape
+
+	ROIdata = CompROIdata[0,it]
+
+	ymin = int(np.min(ROIdata['ROI_Y'][0,0]))
+	ymax = int(np.max(ROIdata['ROI_Y'][0,0]))
+	xmin = int(np.min(ROIdata['ROI_X'][0,0]))
+	xmax = int(np.max(ROIdata['ROI_X'][0,0]))
+
+
+	if not ((xmax - xmin) >= 12 and (ymax-ymin) >= 12):
+		return
+
+	yloc = ROIdata['ROI_Y'][0,0].astype(int)
+	xloc = ROIdata['ROI_X'][0,0].astype(int)
+
+	print("The y coordinates of the lesion tissue is: {0}".format(yloc))
+	print("The x coordinates of the lesion tissue is: {0}".format(xloc))
+
+	center_coords = []
+	for i in range(len(xloc)):
+		center_coords.append([xloc[i], yloc[i]])
+
+	image_poly = Polygon(center_coords)
+	image_poly = image_poly.buffer(0)
+
+	num_boundary_images = 20
+	test_patch_list = []
+
+	minx_lesion, miny_lesion, maxx_lesion, maxy_lesion = image_poly.bounds
+
+
+	counter = 0
+	loop_count = 0
+	while counter < num_boundary_images: 
+
+		randX_pt = int(random.uniform(minx_lesion, maxx_lesion))
+		randY_pt = int(random.uniform(miny_lesion, maxy_lesion))
+
+		xSmall = randX_pt-image_rad
+		xLarge = randX_pt+image_rad
+		ySmall = randY_pt-image_rad
+		yLarge = randY_pt+image_rad
+
+		test_patch = Polygon([(xSmall,ySmall),(xSmall, yLarge), (xLarge, ySmall),(xLarge, yLarge)])
+		test_patch = test_patch.buffer(0)
+
+		lesion_area_scaled = (image_poly.intersection(test_patch)).area/test_patch.area
+
+		# print lesion_area_scaled
+
+		if image_poly.intersects(test_patch) and lesion_area_scaled < 0.6:
+			# print xSmall, xLarge, ySmall, yLarge
+			# print curImage.shape
+			cur_patched_image = curImage[xSmall:xLarge, ySmall:yLarge]
+			# print cur_patched_image.shape
+			final_im = fit_canvas(cur_patched_image)
+			# final_im = cur_patched_image
+			cur_filename = 'patched_lesion_boundary_' + str(it) + '_sample_' + str(counter)
+			save_patched_data(cur_filename,final_im)
+			# test_patch_list.append(test_patch)
+			# num_boundary_images += 1
+			counter += 1
+			# print num_boundary_images
+			#code to save images to file
+
+	# return
+	yloc_norm = ROIdata['Normal_ROIy'][0,0].astype(int)
+	xloc_norm = ROIdata['Normal_ROIx'][0,0].astype(int)
+
+	print "The y coordinates of the normal tissue is: {0}".format(yloc_norm)
+	print "The x coordinates of the normal tissue is: {0}".format(xloc_norm)
+
+
+	center_coords_norm = []
+	for i in range(len(xloc_norm)):
+		center_coords_norm.append([xloc_norm[i][0], yloc_norm[i][0]])
+
+	image_poly_norm = Polygon(center_coords_norm)
+	image_poly_norm = image_poly_norm.buffer(0)
+
+
+	create_inside_outside_patches(curImage, num_boundary_images, image_poly, image_poly_norm, image_rad, it)
+
+
+def create_inside_outside_patches(curImage, num_boundary_images, image_poly, image_poly_norm, image_rad, im_num):
+	minx_lesion, miny_lesion, maxx_lesion, maxy_lesion = image_poly.bounds
+	minx_normal, miny_normal, maxx_normal, maxy_normal = image_poly_norm.bounds
+
+	counter = 0
+	loop_count = 0
+	while counter < num_boundary_images:
+		randX_pt = int(random.uniform(minx_lesion, maxx_lesion))
+		randY_pt = int(random.uniform(miny_lesion, maxy_lesion))
+
+		pnt = Point(randX_pt, randY_pt)
+		if loop_count > 1000:
+			break
+		if image_poly.contains(pnt):
+			xSmall = randX_pt-image_rad
+			xLarge = randX_pt+image_rad
+			ySmall = randY_pt-image_rad
+			yLarge = randY_pt+image_rad
+			# counter += 1
+			test_patch = Polygon([(xSmall,ySmall),(xSmall, yLarge), (xLarge, ySmall),(xLarge, yLarge)])
+			test_patch = test_patch.buffer(0)
+			
+			lesion_area_scaled = (image_poly.intersection(test_patch)).area/test_patch.area
+
+			if image_poly.contains(test_patch) or lesion_area_scaled >= 0.6:
+				cur_patched_image = curImage[xSmall:xLarge, ySmall:yLarge]
+				final_im = fit_canvas(cur_patched_image)
+				# final_im = cur_patched_image
+				cur_filename = 'patched_lesion_internal_' + str(im_num) + '_sample_' + str(counter)
+				save_patched_data(cur_filename,final_im)
+				counter += 1
+			else:
+				loop_count += 1
+
+
+	print("Done with Internal Patches for image {0}!".format(im_num))
+
+	counter = 0
+	loop_count = 0
+	while counter < num_boundary_images:
+		randX_pt = int(random.uniform(minx_normal, maxx_normal))
+		randY_pt = int(random.uniform(miny_normal, maxy_normal))
+
+		pnt = Point(randX_pt, randY_pt)
+		if loop_count > 1000:
+			break
+		if image_poly_norm.contains(pnt):
+			xSmall = randX_pt-image_rad
+			xLarge = randX_pt+image_rad
+			ySmall = randY_pt-image_rad
+			yLarge = randY_pt+image_rad
+			# counter += 1
+			test_patch = Polygon([(xSmall,ySmall),(xSmall, yLarge), (xLarge, ySmall),(xLarge, yLarge)])
+			if image_poly_norm.contains(test_patch):
+				cur_patched_image = curImage[xSmall:xLarge, ySmall:yLarge]
+				final_im = fit_canvas(cur_patched_image)
+				# final_im = cur_patched_image
+				cur_filename = 'patched_lesion_external_' + str(im_num) + '_sample_' + str(counter)
+				save_patched_data(cur_filename,final_im)
+				counter += 1
+			else:
+				loop_count += 1
+
+	print("Done with External Patches for image {0}!".format(im_num))
+
+
+
+def save_patched_data(filename, image):
+	plt.figure()
+	plt.imshow(image, cmap='gray')
+	plt.colorbar()
+	plt.savefig(PATCHED_DATA_IMAGES + filename + '.png')
+	np.save(PATCHED_DATA_DIR + filename + '.npy', image)
+	plt.close()
 
 
 def main():
@@ -415,7 +642,8 @@ def main():
 	# test_contour_creation()
 	# create_dataset_mt()
 	# create_contours_on_plot()
-	create_nonsampled_data_mt()
+	# create_nonsampled_data_mt()
+	create_patched_data_mt()
 
 
 

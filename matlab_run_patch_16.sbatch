@@ -1,3 +1,45 @@
+#!/bin/bash 
+#
+#all commands that start with SBATCH contain commands that are just used by SLURM for scheduling
+#################
+#set a job name  
+#SBATCH --job-name=matlab_run_patch_16
+#################  
+#a file for job output, you can check job progress
+#SBATCH --output=matlab_run_patch_16.out
+#################
+# a file for errors from the jobs
+#SBATCH --error=matlab_run_patch_16.err
+#################
+#time you think you need; default is one hour
+#in minutes 
+# In this case, hh:mm:ss, select whatever time you want, the less you ask for the faster your job will run. 
+# Default is one hour, this example will run in  less that 5 minutes.
+#SBATCH --time=12:00:00
+#################
+# --gres will give you one GPU, you can ask for more, up to 8 (or how ever many are on the node/card)
+#SBATCH --gres gpu:1
+# We are submitting to the gpu partition, if you can submit to the hns partition, change this to -p hns_gpu.
+#SBATCH -p gpu 
+#################
+#number of nodes you are requesting
+#SBATCH --nodes=1
+#################
+#memory per node; default is 4000 MB per CPU
+#SBATCH --mem=8000
+#################
+# Have SLURM send you an email when the job ends or fails, careful, the email could end up in your clutter folder
+#SBATCH --mail-type=END,FAIL # notifications for job done & fail
+#SBATCH --mail-user=nipuna1@stanford.edu
+
+ml purge
+module load tensorflow/0.12.1
+module load cuda/8.0
+module load python/2.7.5
+module load opencv/3.0.0
+module load matlab
+
+matlab -nodesktop <<EOF
 % Load your dataset
 load('/scratch/users/nipuna1/lesion_data/CTLiverNew.mat')
 
@@ -9,7 +51,7 @@ w = warning ('off','all');
 id = w.identifier;
 warning('off',id)
 rmpath('folderthatisnotonpath');
-% job_number_str = getenv('SLURM_ARRAY_TASK_ID');
+
 
 
 % for i=1:length(route)
@@ -47,8 +89,7 @@ rmpath('folderthatisnotonpath');
         % dataset_path_list = py.list({'~/Documents/NipunDocuments/CotermYear/test_data'});
         py.matlab_python_api.load_model('/scratch/users/nipuna1/lesion_patched_ct_no_normal_ckpt/');
         % py.matlab_python_api.load_model('/scratch/users/nipuna1/lesion_patched_ct_patch_10_ckpt/model.ckpt-192');
-        py.matlab_python_api.collect_data_stats('/scratch/users/nipuna1/lesion_data/lesion_patched_ct_rand_100_dataset/');
-        % py.matlab_python_api.collect_data_stats('/scratch/users/nipuna1/lesion_data/lesion_patched_ct_patch_10_dataset/');
+        % py.matlab_python_api.collect_data_stats('/scratch/users/nipuna1/lesion_data/lesion_patched_ct_rand_100_dataset/');
 %         net = vl_simplenn_tidy(net);
         
         % The chosen test radious that will be run for all test cases in
@@ -65,7 +106,6 @@ rmpath('folderthatisnotonpath');
             % fold{4} = 61:80
             % fold{5} = 81:112
             for i=fold{1}(1):fold{1}(end)
-                % i = str2num(job_number_str);
                 i
                 BW=poly2mask(ROIdata{i}.ROI_X,ROIdata{i}.ROI_Y,size(NewImage{i},1),size(NewImage{i},2));
                 [LesCorY{i},LesCorX{i}]=find(BW);
@@ -124,8 +164,8 @@ rmpath('folderthatisnotonpath');
                 %myCNNHaus(i, magRadIndex) = myHaus1;
             end
         end
-        % CODE TO SAVE THE WORKSPACE`
-        save(['/scratch/users/nipuna1/saved_workspace/CTLiver/ChanVese/adaptive_win_11_iter_500_patch_10_kl-'  num2str(myFold)],'-v7.3');
-        % save(['/scratch/users/nipuna1/saved_workspace/CTLiver/ChanVese/adaptive_win_11_iter_500_patch_10_kl-'  num2str(myFold) '-im_num-' job_number_str],'-v7.3');
+        % CODE TO SAVE THE WORKSPACE
+        save(['/scratch/users/nipuna1/saved_workspace/CTLiver/ChanVese/adaptive_patch_16_iter_500-'  num2str(myFold)],'-v7.3');
     end
 % end
+EOF
